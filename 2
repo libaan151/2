@@ -1,79 +1,55 @@
 -- // Dependencies
-local Aiming = loadstring(game:HttpGet("https://raw.githubusercontent.com/libaan151/1/main/1"))()
+local Aiming = loadstring(game:HttpGet(""))()
 Aiming.TeamCheck(false)
 
 -- // Services
-local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- // Vars
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-local CurrentCamera = Workspace.CurrentCamera
+local AimingSelected = Aiming.Selected
+local AimingChecks = Aiming.Checks
 
-local DaHoodSettings = {
-    SilentAim = true,
-    AimLock = true,
-    Prediction = 0.165,
-    AimLockKeybind = Enum.KeyCode.E,
+Aiming.AimLock = {
+    Enabled = true,
+    Keybind = Enum.UserInputType.MouseButton2, -- // You can also have Enum.KeyCode.E, etc.
 }
-getgenv().DaHoodSettings = DaHoodSettings
+local Settings = Aiming.AimLock
 
--- // Overwrite to account downed
-function Aiming.Check()
-    -- // Check A
-    if not (Aiming.Enabled == true and Aiming.Selected ~= LocalPlayer and Aiming.SelectedPart ~= nil) then
-        return false
-    end
-
-    -- // Check if downed
-    local Character = Aiming.Character(Aiming.Selected)
-    local KOd = Character:WaitForChild("BodyEffects")["K.O"].Value
-    local Grabbed = Character:FindFirstChild("GRABBING_CONSTRAINT") ~= nil
-
-    -- // Check B
-    if (KOd or Grabbed) then
-        return false
-    end
-
+-- //
+function Settings.ShouldUseCamera()
     -- //
-    return true
+    return (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
 end
 
--- // Hook
-local __index
-__index = hookmetamethod(game, "__index", function(t, k)
-    -- // Check if it trying to get our mouse's hit or target and see if we can use it
-    if (t:IsA("Mouse") and (k == "Hit" or k == "Target") and Aiming.Check()) then
+-- // Allows for custom
+function Settings.AimLockPosition(CameraMode)
+    local Position = CameraMode and AimingSelected.Part.Position or AimingSelected.Position
+    return Position, {}
+end
+
+-- // Constantly run
+local BeizerCurve = Aiming.BeizerCurve
+RunService:BindToRenderStep("AimLockAiming", 0, function()
+    -- // Vars
+    local Keybind = Settings.Keybind
+    local IsToggled = (Keybind.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Keybind) or UserInputService:IsMouseButtonPressed(Keybind))
+    local CameraMode = Settings.ShouldUseCamera()
+    local Manager = CameraMode and BeizerCurve.ManagerB or BeizerCurve.ManagerA
+
+    -- // Make sure key (or mouse button) is down
+    if (Settings.Enabled and IsToggled and AimingChecks.IsAvailable()) then
         -- // Vars
-        local SelectedPart = Aiming.SelectedPart
+        local Position, BeizerData = Settings.AimLockPosition(CameraMode)
+        BeizerData.TargetPosition = Position
 
-        -- // Hit/Target
-        if (DaHoodSettings.SilentAim and (k == "Hit" or k == "Target")) then
-            -- // Hit to account prediction
-            local Hit = SelectedPart.CFrame + (SelectedPart.Velocity * DaHoodSettings.Prediction)
-
-            -- // Return modded val
-            return (k == "Hit" and Hit or SelectedPart)
-        end
-    end
-
-    -- // Return
-    return __index(t, k)
-end)
-
--- // Aimlock
-RunService:BindToRenderStep("AimLock", 0, function()
-    if (DaHoodSettings.AimLock and Aiming.Check() and UserInputService:IsKeyDown(DaHoodSettings.AimLockKeybind)) then
-        -- // Vars
-        local SelectedPart = Aiming.SelectedPart
-
-        -- // Hit to account prediction
-        local Hit = SelectedPart.CFrame + (SelectedPart.Velocity * DaHoodSettings.Prediction)
-
-        -- // Set the camera to face towards the Hit
-        CurrentCamera.CFrame = CFrame.lookAt(CurrentCamera.CFrame.Position, Hit.Position)
+        -- // Aim
+        Manager:ChangeData(BeizerData)
+    else
+        -- // Stop any aim
+        Manager:StopCurrent()
     end
 end)
+
+-- //
+return Aiming
