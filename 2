@@ -1,82 +1,55 @@
 -- // Dependencies
 local Aiming = loadstring(game:HttpGet("https://raw.githubusercontent.com/libaan151/1/main/1"))()
-local AimingChecks = Aiming.Checks
-local AimingSelected = Aiming.Selected
-local AimLockSettings = Aiming.AimLock
+Aiming.TeamCheck(false)
 
 -- // Services
-local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- // Vars
-local CurrentCamera = Workspace.CurrentCamera
+local AimingSelected = Aiming.Selected
+local AimingChecks = Aiming.Checks
 
-local DaHoodSettings = {
-    Prediction = 0.165,
-
-    SilentAim = true,
-
-    AimLock = AimLockSettings,
-    BeizerLock = {
-        Smoothness = 0.05,
-        CurvePoints = {
-            Vector2.new(0.83, 0),
-            Vector2.new(0.17, 1)
-        }
-    }
+Aiming.AimLock = {
+    Enabled = true,
+    Keybind = Enum.UserInputType.MouseButton2, -- // You can also have Enum.KeyCode.E, etc.
 }
-getgenv().DaHoodSettings = DaHoodSettings
+local Settings = Aiming.AimLock
 
 -- //
-local function ApplyPredictionFormula(SelectedPart)
-    return SelectedPart.CFrame + (SelectedPart.Velocity * DaHoodSettings.Prediction)
+function Settings.ShouldUseCamera()
+    -- //
+    return (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
 end
 
--- // Hook
-local __index
-__index = hookmetamethod(game, "__index", function(t, k)
-    -- // Check if it trying to get our mouse's hit or target and see if we can use it
-    if (t:IsA("Mouse") and (k == "Hit" or k == "Target") and AimingChecks.IsAvailable() and DaHoodSettings.SilentAim) then
+-- // Allows for custom
+function Settings.AimLockPosition(CameraMode)
+    local Position = CameraMode and AimingSelected.Part.Position or AimingSelected.Position
+    return Position, {}
+end
+
+-- // Constantly run
+local BeizerCurve = Aiming.BeizerCurve
+RunService:BindToRenderStep("AimLockAiming", 0, function()
+    -- // Vars
+    local Keybind = Settings.Keybind
+    local IsToggled = (Keybind.EnumType == Enum.KeyCode and UserInputService:IsKeyDown(Keybind) or UserInputService:IsMouseButtonPressed(Keybind))
+    local CameraMode = Settings.ShouldUseCamera()
+    local Manager = CameraMode and BeizerCurve.ManagerB or BeizerCurve.ManagerA
+
+    -- // Make sure key (or mouse button) is down
+    if (Settings.Enabled and IsToggled and AimingChecks.IsAvailable()) then
         -- // Vars
-        local SelectedPart = AimingSelected.Part
-        local Hit = ApplyPredictionFormula(SelectedPart)
+        local Position, BeizerData = Settings.AimLockPosition(CameraMode)
+        BeizerData.TargetPosition = Position
 
-        -- // Return modded val
-        return (k == "Hit" and Hit or SelectedPart)
+        -- // Aim
+        Manager:ChangeData(BeizerData)
+    else
+        -- // Stop any aim
+        Manager:StopCurrent()
     end
-
-    -- // Return
-    return __index(t, k)
 end)
 
--- // Aimlock
-function AimLockSettings.AimLockPosition(CameraMode)
-    -- // Vars
-    local Position
-    local BeizerData = {}
-
-    -- // Hit to account prediction
-    local Hit = ApplyPredictionFormula(AimingSelected.Part)
-    local HitPosition = Hit.Position
-
-    -- //
-    if (CameraMode) then
-        Position = HitPosition
-    else
-        -- // Convert 3d -> 2d
-        local Vector, _ = CurrentCamera:WorldToViewportPoint(HitPosition)
-        local Vector2D = Vector2.new(Vector.X, Vector.Y)
-
-        -- // Vars
-        local BeizerLock = DaHoodSettings.BeizerLock
-
-        -- //
-        Position = Vector2D
-        BeizerData = {
-            Smoothness = BeizerLock.Smoothness,
-            CurvePoints = BeizerLock.CurvePoints
-        }
-    end
-
-    -- // Return
-    return Position, BeizerData
-end
+-- //
+return Aiming
